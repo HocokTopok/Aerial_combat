@@ -1,0 +1,843 @@
+/* ═══════════════════════════════════════════════════════════════
+   БАЗОВЫЕ СТИЛИ
+═══════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg:           #080812;
+  --bg2:          #0d0d1e;
+  --bg3:          #131328;
+  --panel:        #0f0f22;
+  --border:       #1e1e42;
+  --border-light: #2a2a5a;
+  --accent:       #3d7fff;
+  --accent-dim:   #1a3a80;
+  --accent-glow:  rgba(61,127,255,0.25);
+  --green:        #22cc66;
+  --green-dim:    #0d4422;
+  --red:          #ff3a3a;
+  --red-dim:      #4a0f0f;
+  --orange:       #ff8c00;
+  --text:         #d0d0f0;
+  --text-dim:     #6060a0;
+  --text-bright:  #ffffff;
+  --font:         'Courier New', 'Consolas', monospace;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  letter-spacing: 0.03em;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ЭКРАНЫ
+═══════════════════════════════════════════════════════════════ */
+
+.screen {
+  position: fixed;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.screen.active {
+  display: flex;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ВЕРХНЯЯ ПАНЕЛЬ
+═══════════════════════════════════════════════════════════════ */
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 44px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.top-bar-title {
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.top-bar-badge {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ЭКРАН ЗАГРУЗКИ
+═══════════════════════════════════════════════════════════════ */
+
+#screen-loading {
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #0d0d2e 0%, #080812 70%);
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.loading-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-top {
+  font-size: 48px;
+  color: var(--accent);
+  filter: drop-shadow(0 0 16px var(--accent));
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+
+.logo-title {
+  font-size: 32px;
+  font-weight: bold;
+  letter-spacing: 0.3em;
+  color: var(--text-bright);
+  text-shadow: 0 0 30px var(--accent-glow), 0 0 60px var(--accent-glow);
+}
+
+.logo-line {
+  width: 200px;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--accent), transparent);
+}
+
+.spinner-wrap {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  color: var(--text-dim);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  animation: pulse-text 2s ease-in-out infinite;
+}
+
+@keyframes pulse-text {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ЭКРАН РАССТАНОВКИ
+═══════════════════════════════════════════════════════════════ */
+
+.placement-layout {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* Секция с кубом */
+.cube-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cube-container {
+  position: relative;
+  background: transparent;
+  border-radius: 4px;
+}
+
+.cube-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+.cube-hint b {
+  color: var(--accent);
+}
+
+/* Боковая панель расстановки */
+.placement-panel {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+.panel-title {
+  padding: 14px 16px 10px;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Список флота */
+.fleet-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.fleet-group {
+  border-bottom: 1px solid var(--border);
+}
+
+.fleet-group-label {
+  padding: 8px 16px 4px;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.fleet-count {
+  color: var(--accent);
+}
+
+.fleet-item {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  transition: background 0.2s;
+}
+
+.fleet-item:hover {
+  background: rgba(61,127,255,0.04);
+}
+
+.fleet-item.placed {
+  background: rgba(34,204,102,0.05);
+}
+
+.fleet-item.invalid {
+  background: rgba(255,58,58,0.06);
+}
+
+.fleet-item-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-bright);
+}
+
+.plane-icon {
+  font-size: 11px;
+  opacity: 0.7;
+  width: 36px;
+  text-align: center;
+}
+
+.fleet-item-coords {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.fleet-item-coords label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.coord-sel {
+  background: var(--bg3);
+  border: 1px solid var(--border-light);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 3px 4px;
+  border-radius: 3px;
+  width: 58px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.coord-sel:focus {
+  border-color: var(--accent);
+}
+
+.fleet-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-place {
+  background: var(--bg3);
+  border: 1px solid var(--border-light);
+  color: var(--text-dim);
+  font-family: var(--font);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-place:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.placement-status {
+  font-size: 14px;
+  color: var(--text-dim);
+  transition: all 0.3s;
+}
+
+.placement-status.ok    { color: var(--green); }
+.placement-status.error { color: var(--red); }
+
+/* Кнопка Готов */
+.btn-ready {
+  margin: 14px 16px 0;
+  padding: 12px;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+}
+
+.placement-waiting-text,
+.waiting-text {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 8px 16px;
+  animation: pulse-text 2s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ЭКРАН БОЯ
+═══════════════════════════════════════════════════════════════ */
+
+.battle-layout {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 12px 20px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.battle-cube-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.cube-label {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.my-label    { color: var(--green); }
+.enemy-label { color: var(--red); }
+
+.battle-cube {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Панель выстрела */
+.shot-panel {
+  flex-shrink: 0;
+  z-index: 1;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shot-selectors {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.shot-sel-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shot-label {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+}
+
+.shot-sel {
+  background: var(--bg3);
+  border: 1px solid var(--border-light);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  min-width: 110px;
+}
+
+.shot-sel:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.shot-preview-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-height: 16px;
+}
+
+/* Статус хода */
+.status-badge {
+  transition: all 0.3s;
+}
+
+.status-badge.your-turn {
+  color: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 0 8px rgba(34,204,102,0.3);
+}
+
+.status-badge.opponent-turn {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+/* Оверлей хода соперника */
+.turn-overlay {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(13,13,30,0.92);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 10px 24px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  animation: pulse-text 2s ease-in-out infinite;
+  backdrop-filter: blur(8px);
+  z-index: 10;
+}
+
+/* Уведомление о попадании */
+.hit-notification {
+  position: fixed;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  font-weight: bold;
+  z-index: 20;
+  animation: notification-in 0.3s ease-out;
+  backdrop-filter: blur(8px);
+  border: 1px solid transparent;
+}
+
+.hit-notification.hit {
+  background: rgba(255,58,58,0.15);
+  border-color: var(--red);
+  color: var(--red);
+  text-shadow: 0 0 12px var(--red);
+}
+
+.hit-notification.miss {
+  background: rgba(13,13,40,0.92);
+  border-color: var(--border-light);
+  color: var(--text-dim);
+}
+
+.hit-notification.kill {
+  background: rgba(255,58,58,0.25);
+  border-color: #ff6060;
+  color: #ff8080;
+  text-shadow: 0 0 16px var(--red);
+  box-shadow: 0 0 20px rgba(255,58,58,0.3);
+}
+
+@keyframes notification-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ЭКРАН ФИНАЛА
+═══════════════════════════════════════════════════════════════ */
+
+#screen-end {
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #0d0d2e 0%, #080812 70%);
+}
+
+.end-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+  animation: end-appear 0.8s ease-out;
+}
+
+@keyframes end-appear {
+  from { opacity: 0; transform: scale(0.9) translateY(20px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.end-icon {
+  font-size: 64px;
+  animation: float 3s ease-in-out infinite;
+}
+
+.end-result {
+  font-size: 52px;
+  font-weight: bold;
+  letter-spacing: 0.3em;
+}
+
+#screen-end.win .end-icon,
+#screen-end.win .end-result {
+  color: var(--green);
+  text-shadow: 0 0 40px rgba(34,204,102,0.5), 0 0 80px rgba(34,204,102,0.2);
+}
+
+#screen-end.lose .end-icon,
+#screen-end.lose .end-result {
+  color: var(--red);
+  text-shadow: 0 0 40px rgba(255,58,58,0.5), 0 0 80px rgba(255,58,58,0.2);
+}
+
+.end-subtitle {
+  font-size: 14px;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+}
+
+.end-line {
+  width: 160px;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--border-light), transparent);
+}
+
+.end-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ОБЩИЕ КОМПОНЕНТЫ
+═══════════════════════════════════════════════════════════════ */
+
+/* Кнопка-primary */
+.btn-primary {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 0.2em;
+  padding: 10px 24px;
+  border-radius: 3px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.btn-primary:hover:not(:disabled)::before { opacity: 0.1; }
+.btn-primary:active:not(:disabled)::before { opacity: 0.2; }
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+.btn-primary:disabled {
+  border-color: var(--border);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+.btn-fire {
+  padding: 8px 28px;
+  font-size: 13px;
+  letter-spacing: 0.25em;
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.btn-fire:hover:not(:disabled) {
+  box-shadow: 0 0 16px rgba(255,58,58,0.3);
+}
+
+.btn-fire:disabled {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
+/* Сообщение об ошибке */
+.error-msg {
+  margin: 8px 16px;
+  padding: 8px 12px;
+  background: var(--red-dim);
+  border: 1px solid var(--red);
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--red);
+  line-height: 1.5;
+}
+
+/* Утилиты */
+.hidden { display: none !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   СКРОЛЛБАР
+═══════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar             { width: 6px; }
+::-webkit-scrollbar-track       { background: var(--bg); }
+::-webkit-scrollbar-thumb       { background: var(--border-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+
+/* ═══════════════════════════════════════════════════════════════
+   ZOOM BAR
+═══════════════════════════════════════════════════════════════ */
+
+.zoom-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-zoom {
+  background: var(--bg3);
+  border: 1px solid var(--border-light);
+  color: var(--text-dim);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-zoom:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.zoom-pct {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 38px;
+  text-align: center;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+.zoom-pct:hover {
+  color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   КНОПКИ СТРЕЛОК (ПЕРЕМЕЩЕНИЕ)
+═══════════════════════════════════════════════════════════════ */
+
+.fleet-item-arrows {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.arrows-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.btn-arrow {
+  background: var(--bg3);
+  border: 1px solid var(--border-light);
+  color: var(--text-dim);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1.2;
+}
+
+.btn-arrow:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(61,127,255,0.08);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   КНОПКИ ВРАЩЕНИЯ САМОЛЁТОВ
+═══════════════════════════════════════════════════════════════ */
+
+.fleet-item-rot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.rot-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.btn-rot {
+  background: var(--bg3);
+  border: 1px solid var(--border-light);
+  color: var(--text-dim);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1.2;
+}
+
+.btn-rot:hover {
+  border-color: #9955ee;
+  color: #bb77ff;
+  background: rgba(153,85,238,0.08);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ЦВЕТА ДЛЯ СЕЛЕКТОРА Z (цветные точки)
+═══════════════════════════════════════════════════════════════ */
+
+/* Используется в cube.js и game.js через JS для меток */
+:root {
+  --z1:  #ff3333;
+  --z2:  #ff8833;
+  --z3:  #ffee22;
+  --z4:  #33cc44;
+  --z5:  #22cccc;
+  --z6:  #44aaff;
+  --z7:  #2244ff;
+  --z8:  #9933ff;
+  --z9:  #ffffff;
+  --z10: #888888;
+}

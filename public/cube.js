@@ -1,0 +1,559 @@
+'use strict';
+/**
+ * cube.js — Three.js визуализация 3D куба 10×10×10
+ * Зависимости: Three.js (r134), planes.js (window.Planes)
+ * Экспортирует: window.CubeRenderer
+ *
+ * Система координат:
+ *   game (X=1..10, Y=1..10, Z=1..10) → Three.js (x=0..10, y=0..10, z=0..10)
+ *   threeX = gameX - 0.5  (центр ячейки)
+ *   threeY = gameZ - 0.5  (высота = цветовой слой)
+ *   threeZ = gameY - 0.5  (глубина = буква)
+ */
+
+window.CubeRenderer = class CubeRenderer {
+
+  // ─── Конструктор ──────────────────────────────────────────────────────────
+
+  constructor(container, options) {
+    this._container = container;
+    this._cells     = new Map();   // key → [{mesh, tag}]
+    this._previews  = [];
+    this._targets   = [];
+    this._time      = 0;
+    this._raf       = null;
+
+    // Начальный угол камеры
+    this._theta  = Math.PI * 0.22;   // горизонталь
+    this._phi    = Math.PI * 0.30;   // вертикаль (0=сверху, π/2=сбоку)
+    this._radius = 22;
+    this._center = new THREE.Vector3(5, 5, 5);
+
+    /** Вызывается при изменении масштаба: fn(pct: number) */
+    this.onZoomChange = null;
+
+    // Опции
+    const opts       = options || {};
+    this._showAxes   = !!opts.axes;
+    this._labelsGroup = null;
+    this._axesGroup   = null;
+
+    this._init();
+    this._animate();
+  }
+
+  // ─── Инициализация ────────────────────────────────────────────────────────
+
+  _init() {
+    const W = this._container.clientWidth  || 480;
+    const H = this._container.clientHeight || 480;
+
+    // WebGL-рендерер
+    this._renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    this._renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this._renderer.setSize(W, H);
+    this._renderer.setClearColor(0x000000, 0);
+    this._container.appendChild(this._renderer.domElement);
+
+    // Сцена и камера
+    this._scene  = new THREE.Scene();
+    this._camera = new THREE.PerspectiveCamera(42, W / H, 0.1, 300);
+    this._positionCamera();
+
+    // Элементы сцены
+    this._buildGrid();
+    this._buildLabels();
+    if (this._showAxes) this._buildAxes();
+    this._setupOrbit();
+
+    // Слежение за изменением размера контейнера
+    this._ro = new ResizeObserver(() => this._onResize());
+    this._ro.observe(this._container);
+  }
+
+  _positionCamera() {
+    const s = Math.sin(this._phi);
+    const c = Math.cos(this._phi);
+    this._camera.position.set(
+      this._center.x + this._radius * s * Math.sin(this._theta),
+      this._center.y + this._radius * c,
+      this._center.z + this._radius * s * Math.cos(this._theta)
+    );
+    this._camera.lookAt(this._center);
+  }
+
+  _onResize() {
+    const W = this._container.clientWidth;
+    const H = this._container.clientHeight;
+    if (!W || !H) return;
+    this._camera.aspect = W / H;
+    this._camera.updateProjectionMatrix();
+    this._renderer.setSize(W, H);
+  }
+
+  // ─── Рендер-цикл ──────────────────────────────────────────────────────────
+
+  _animate() {
+    this._raf = requestAnimationFrame(() => this._animate());
+    this._time += 0.016;
+
+    // Пульсация прицельных ячеек
+    const pulse = 0.4 + 0.55 * (0.5 + 0.5 * Math.sin(this._time * 4.5));
+    for (const m of this._targets) {
+      if (m.material) m.material.opacity = pulse;
+    }
+
+    this._renderer.render(this._scene, this._camera);
+  }
+
+  // ─── Сетка куба ──────────────────────────────────────────────────────────
+
+  _buildGrid() {
+    const pos  = [];
+    const col  = [];
+
+    // Внешние рёбра ярче, внутренние тусклее
+    const bright = [0.20, 0.20, 0.48];
+    const dim    = [0.09, 0.09, 0.22];
+
+    const isEdge = (a, b) => (a === 0 || a === 10) && (b === 0 || b === 10);
+
+    // Линии вдоль threeX (gameX): для каждой пары (threeZ=gameY, threeY=gameZ)
+    for (let gy = 0; gy <= 10; gy++) {
+      for (let gz = 0; gz <= 10; gz++) {
+        const c = isEdge(gy, gz) ? bright : dim;
+        pos.push(0, gz, gy,  10, gz, gy);
+        col.push(...c, ...c);
+      }
+    }
+    // Линии вдоль threeZ (gameY): для каждой пары (threeX=gameX, threeY=gameZ)
+    for (let gx = 0; gx <= 10; gx++) {
+      for (let gz = 0; gz <= 10; gz++) {
+        const c = isEdge(gx, gz) ? bright : dim;
+        pos.push(gx, gz, 0,  gx, gz, 10);
+        col.push(...c, ...c);
+      }
+    }
+    // Линии вдоль threeY (gameZ): для каждой пары (threeX=gameX, threeZ=gameY)
+    for (let gx = 0; gx <= 10; gx++) {
+      for (let gy = 0; gy <= 10; gy++) {
+        const c = isEdge(gx, gy) ? bright : dim;
+        pos.push(gx, 0, gy,  gx, 10, gy);
+        col.push(...c, ...c);
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color',    new THREE.Float32BufferAttribute(col, 3));
+    this._scene.add(new THREE.LineSegments(geo,
+      new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 })
+    ));
+  }
+
+  // ─── Метки осей ──────────────────────────────────────────────────────────
+  // Все три оси исходят из угла (0,0,0) — начала координат куба.
+  // Спрайты всегда смотрят на камеру (THREE.Sprite).
+
+  _buildLabels() {
+    const g = new THREE.Group();
+
+    // X: числа 1–10, вдоль оси +threeX от угла (y=−1, z=−1.2)
+    for (let gx = 1; gx <= 10; gx++) {
+      const sp = this._makeTextSprite(String(gx), '#ffffff', null, 34);
+      sp.position.set(gx - 0.5, -1.05, -1.2);
+      sp.scale.set(1.1, 0.55, 1);
+      g.add(sp);
+    }
+
+    // Y: буквы A–J, вдоль оси +threeZ (=gameY) от угла (x=−1.2, y=−1)
+    for (let gy = 1; gy <= 10; gy++) {
+      const sp = this._makeTextSprite(Planes.Y_LETTERS[gy - 1], '#ffffff', null, 34);
+      sp.position.set(-1.2, -1.05, gy - 0.5);
+      sp.scale.set(1.1, 0.55, 1);
+      g.add(sp);
+    }
+
+    // Z: цвета с цветными квадратиками, вдоль оси +threeY (=gameZ высота)
+    // от угла (x=−2.8, z=−0.5)
+    for (let gz = 1; gz <= 10; gz++) {
+      const col = Planes.COLORS[gz - 1];
+      const sp  = this._makeTextSprite(col.name, '#ffffff', col.hex, 28);
+      sp.position.set(-2.9, gz - 0.5, -0.5);
+      sp.scale.set(3.2, 0.60, 1);
+      g.add(sp);
+    }
+
+    this._scene.add(g);
+    this._labelsGroup = g;
+  }
+
+  /** Создаёт Sprite с текстом (и необязательным цветным квадратиком).
+   *  @param {string}  text
+   *  @param {string}  textColor  — CSS-цвет текста
+   *  @param {string|null} dotHex — цвет квадратика слева (null = нет)
+   *  @param {number}  fontSize   — размер шрифта в px на канвасе (default 28)
+   */
+  _makeTextSprite(text, textColor, dotHex, fontSize = 28) {
+    const CH = Math.round(fontSize * 2.1);
+    const CW = 256;
+    const cv  = document.createElement('canvas');
+    cv.width  = CW;
+    cv.height = CH;
+    const ctx = cv.getContext('2d');
+
+    let txtX = CW / 2;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (dotHex) {
+      const sqSz = Math.round(fontSize * 1.1);
+      const sqY  = (CH - sqSz) / 2;
+      const sqX  = 8;
+      ctx.fillStyle = dotHex;
+      ctx.fillRect(sqX, sqY, sqSz, sqSz);
+      ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sqX, sqY, sqSz, sqSz);
+      txtX = sqX + sqSz + 8;
+      ctx.textAlign = 'left';
+    }
+
+    ctx.font      = `bold ${fontSize}px "Courier New", monospace`;
+    ctx.fillStyle = textColor;
+    ctx.fillText(text, txtX, CH / 2);
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.needsUpdate = true;
+    return new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })
+    );
+  }
+
+  // ─── 3D Оси координат (только для куба расстановки) ─────────────────────
+
+  _buildAxes() {
+    if (this._axesGroup) {
+      this._axesGroup.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) { if (obj.material.map) obj.material.map.dispose(); obj.material.dispose(); }
+      });
+      this._scene.remove(this._axesGroup);
+    }
+
+    const SHAFT_END  = 11.4;   // конец стержня
+    const ARROW_TIP  = 12.2;   // вершина конуса
+    const CONE_H     = 0.85;
+    const CONE_R     = 0.22;
+    const LABEL_DIST = 13.2;   // расстояние подписи X/Y/Z от начала
+    const WHITE      = 0xffffff;
+    const upVec      = new THREE.Vector3(0, 1, 0);
+
+    // threeX = gameX, threeZ = gameY (буквы), threeY = gameZ (высота/цвета)
+    const axes = [
+      { dir: new THREE.Vector3(1, 0, 0), label: 'X' },
+      { dir: new THREE.Vector3(0, 0, 1), label: 'Y' },
+      { dir: new THREE.Vector3(0, 1, 0), label: 'Z' },
+    ];
+
+    const g = new THREE.Group();
+
+    for (const ax of axes) {
+      const mat = new THREE.LineBasicMaterial({ color: WHITE, transparent: true, opacity: 0.90 });
+
+      // Стержень: от (0,0,0) до конца стержня
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        ax.dir.clone().multiplyScalar(SHAFT_END),
+      ]);
+      g.add(new THREE.Line(lineGeo, mat));
+
+      // Конус-наконечник
+      const coneGeo = new THREE.ConeGeometry(CONE_R, CONE_H, 10);
+      const cone    = new THREE.Mesh(coneGeo,
+        new THREE.MeshBasicMaterial({ color: WHITE, transparent: true, opacity: 0.95 })
+      );
+      // Центр конуса посередине между основанием и вершиной
+      cone.position.copy(ax.dir.clone().multiplyScalar(ARROW_TIP - CONE_H * 0.5));
+      if (!ax.dir.equals(upVec)) {
+        cone.quaternion.setFromUnitVectors(upVec, ax.dir);
+      }
+      g.add(cone);
+
+      // Подпись оси (белый спрайт всегда смотрит на камеру)
+      const sp = this._makeTextSprite(ax.label, '#ffffff', null, 42);
+      sp.position.copy(ax.dir.clone().multiplyScalar(LABEL_DIST));
+      sp.scale.set(1.2, 0.60, 1);
+      g.add(sp);
+    }
+
+    this._scene.add(g);
+    this._axesGroup = g;
+  }
+
+  // ─── Мышь: вращение камеры ────────────────────────────────────────────────
+
+  _setupOrbit() {
+    const el = this._renderer.domElement;
+    let drag = false, lx = 0, ly = 0;
+
+    const start = (x, y) => { drag = true; lx = x; ly = y; };
+    const move  = (x, y) => {
+      if (!drag) return;
+      this._theta -= (x - lx) * 0.010;
+      // Нажатие вверх → передняя сторона куба поднимается (φ уменьшается)
+      this._phi = Math.max(0.08, Math.min(Math.PI * 0.47, this._phi - (y - ly) * 0.010));
+      lx = x; ly = y;
+      this._positionCamera();
+    };
+    const end = () => { drag = false; };
+
+    el.addEventListener('mousedown',  e => start(e.clientX, e.clientY));
+    window.addEventListener('mousemove',  e => move(e.clientX, e.clientY));
+    window.addEventListener('mouseup',    end);
+    el.addEventListener('touchstart', e => { if (e.touches.length===1) start(e.touches[0].clientX, e.touches[0].clientY); }, { passive:true });
+    window.addEventListener('touchmove',  e => { if (drag && e.touches.length===1) move(e.touches[0].clientX, e.touches[0].clientY); }, { passive:true });
+    window.addEventListener('touchend',   end);
+
+    // Приближение/отдаление колесом мыши
+    el.addEventListener('wheel', e => {
+      e.preventDefault();
+      this._radius = Math.max(8, Math.min(44, this._radius * (e.deltaY > 0 ? 1.10 : 0.91)));
+      this._positionCamera();
+      if (this.onZoomChange) this.onZoomChange(this.getZoomPct());
+    }, { passive: false });
+  }
+
+  // ─── Масштаб (публичный API) ──────────────────────────────────────────────
+
+  zoomIn()     { this._radius = Math.max(8,  this._radius * 0.85); this._positionCamera(); if (this.onZoomChange) this.onZoomChange(this.getZoomPct()); }
+  zoomOut()    { this._radius = Math.min(44, this._radius * 1.18); this._positionCamera(); if (this.onZoomChange) this.onZoomChange(this.getZoomPct()); }
+  zoomReset()  { this._radius = 22; this._positionCamera(); if (this.onZoomChange) this.onZoomChange(this.getZoomPct()); }
+  /** Возвращает текущий масштаб в % относительно исходного радиуса (22) */
+  getZoomPct() { return Math.round(22 / this._radius * 100); }
+
+  // ─── Вспомогательные ─────────────────────────────────────────────────────
+
+  /** Центр ячейки в пространстве Three.js */
+  _t(gx, gy, gz) {
+    return new THREE.Vector3(gx - 0.5, gz - 0.5, gy - 0.5);
+  }
+
+  /** Общая геометрия ячейки (переиспользуется) */
+  static get _BOX() {
+    if (!this.__BOX) this.__BOX = new THREE.BoxGeometry(0.88, 0.88, 0.88);
+    return this.__BOX;
+  }
+  static get _EDGES() {
+    if (!this.__EDGES) this.__EDGES = new THREE.EdgesGeometry(CubeRenderer._BOX);
+    return this.__EDGES;
+  }
+
+  _solid(hexColor, opacity, depthWrite = false) {
+    return new THREE.Mesh(CubeRenderer._BOX,
+      new THREE.MeshBasicMaterial({ color: hexColor, transparent: true, opacity, depthWrite })
+    );
+  }
+  _wire(hexColor, opacity = 0.75) {
+    return new THREE.LineSegments(CubeRenderer._EDGES,
+      new THREE.LineBasicMaterial({ color: hexColor, transparent: true, opacity })
+    );
+  }
+
+  /** Добавить меш в ячейку */
+  _addCell(gx, gy, gz, mesh, tag) {
+    const key = `${gx},${gy},${gz}`;
+    if (!this._cells.has(key)) this._cells.set(key, []);
+    this._cells.get(key).push({ mesh, tag });
+    mesh.position.copy(this._t(gx, gy, gz));
+    this._scene.add(mesh);
+  }
+
+  /** Рекурсивно освободить материалы меша и его дочерних объектов */
+  static _disposeMesh(mesh) {
+    mesh.traverse(obj => { if (obj.material) obj.material.dispose(); });
+  }
+
+  /** Удалить все меши с данным тегом */
+  _clearTag(tag) {
+    for (const [key, arr] of this._cells) {
+      const keep = [], remove = [];
+      for (const e of arr) (e.tag === tag ? remove : keep).push(e);
+      for (const e of remove) { this._scene.remove(e.mesh); CubeRenderer._disposeMesh(e.mesh); }
+      if (keep.length) this._cells.set(key, keep);
+      else             this._cells.delete(key);
+    }
+  }
+
+  /** Удалить все меши */
+  _clearAllCells() {
+    for (const [, arr] of this._cells)
+      for (const e of arr) { this._scene.remove(e.mesh); CubeRenderer._disposeMesh(e.mesh); }
+    this._cells.clear();
+  }
+
+  // ─── Публичный API ────────────────────────────────────────────────────────
+
+  /**
+   * Показать собственный самолёт (синий полупрозрачный).
+   * @param {Array<{x,y,z}>} cells
+   * @param {string}         tag  — например 'own-large', 'own-medium-0'
+   */
+  showOwnPlane(cells, tag) {
+    this._clearTag(tag);
+    for (const c of cells) {
+      const m = this._solid(0x3d7fff, 0.32);
+      m.add(this._wire(0x6699ff, 0.65));
+      this._addCell(c.x, c.y, c.z, m, tag);
+    }
+  }
+
+  /**
+   * Показать превью расстановки (зелёный = ок, красный = ошибка).
+   * @param {Array<{x,y,z}>} cells
+   * @param {boolean}        valid
+   */
+  showPreview(cells, valid) {
+    this.clearPreview();
+    const fill  = valid ? 0x22cc66 : 0xff3a3a;
+    const wire  = valid ? 0x44ff88 : 0xff6666;
+    const alpha = valid ? 0.42     : 0.38;
+    for (const c of cells) {
+      const m = this._solid(fill, alpha);
+      m.add(this._wire(wire, 0.85));
+      m.position.copy(this._t(c.x, c.y, c.z));
+      this._scene.add(m);
+      this._previews.push(m);
+    }
+  }
+
+  /** Убрать превью */
+  clearPreview() {
+    for (const m of this._previews) { this._scene.remove(m); CubeRenderer._disposeMesh(m); }
+    this._previews = [];
+  }
+
+  /**
+   * Подсветить паттерн предстоящего выстрела (7 ячеек, пульсация).
+   * @param {Array<{x,y,z}>} cells
+   */
+  setShotTarget(cells) {
+    this.clearShotTarget();
+    for (const c of cells) {
+      const m = this._solid(0xffffff, 0.7);
+      m.add(this._wire(0xffffff, 0.95));
+      m.position.copy(this._t(c.x, c.y, c.z));
+      this._scene.add(m);
+      this._targets.push(m);
+    }
+  }
+
+  /** Убрать прицел */
+  clearShotTarget() {
+    for (const m of this._targets) { this._scene.remove(m); CubeRenderer._disposeMesh(m); }
+    this._targets = [];
+  }
+
+  /**
+   * Отметить результат моего выстрела — рисуется на кубе ПРОТИВНИКА.
+   * @param {Array<{x,y,z}>} pattern        — все 7 ячеек паттерна
+   * @param {Array<{x,y,z}>} hits           — ячейки с попаданием
+   * @param {Array<{cells}>} killedPlanes   — уничтоженные самолёты
+   * @param {Array<{x,y,z}>} adjacent       — зона вокруг уничтоженных
+   */
+  markShot(pattern, hits, killedPlanes, adjacent) {
+    const hitKeys  = new Set(hits.map(c => Planes.cellKey(c)));
+    const killKeys = new Set();
+    for (const p of killedPlanes) for (const c of p.cells) killKeys.add(Planes.cellKey(c));
+
+    for (const c of pattern) {
+      const k = Planes.cellKey(c);
+      let m;
+      if (killKeys.has(k)) {
+        m = this._solid(0xff2200, 0.95, true);
+        m.add(this._wire(0xff6644, 1.0));
+      } else if (hitKeys.has(k)) {
+        m = this._solid(0xff3a3a, 0.85, true);
+        m.add(this._wire(0xff6666, 0.90));
+      } else {
+        m = this._solid(0x2a3d55, 0.30);
+        m.add(this._wire(0x3a4d66, 0.40));
+      }
+      this._addCell(c.x, c.y, c.z, m, 'shot');
+    }
+
+    // Зона отчуждения
+    for (const c of adjacent) {
+      const m = this._solid(0x111122, 0.45);
+      m.add(this._wire(0x222244, 0.35));
+      this._addCell(c.x, c.y, c.z, m, 'shot-adj');
+    }
+  }
+
+  /**
+   * Отметить входящий удар — рисуется на МОЁМкубе.
+   * Вызывается когда соперник стреляет.
+   */
+  markIncoming(pattern, hits, killedPlanes, adjacent) {
+    const hitKeys  = new Set(hits.map(c => Planes.cellKey(c)));
+    const killKeys = new Set();
+    for (const p of killedPlanes) for (const c of p.cells) killKeys.add(Planes.cellKey(c));
+
+    for (const c of pattern) {
+      const k = Planes.cellKey(c);
+      let m;
+      if (killKeys.has(k)) {
+        m = this._solid(0xff2200, 0.90, true);
+        m.add(this._wire(0xff7755, 1.0));
+      } else if (hitKeys.has(k)) {
+        m = this._solid(0xff5500, 0.75, true);
+        m.add(this._wire(0xff8844, 0.90));
+      } else {
+        m = this._solid(0x1a2233, 0.25);
+      }
+      this._addCell(c.x, c.y, c.z, m, 'incoming');
+    }
+
+    // Зона вокруг уничтоженного
+    for (const c of adjacent) {
+      const m = this._solid(0x0f0f22, 0.40);
+      m.add(this._wire(0x1a1a33, 0.30));
+      this._addCell(c.x, c.y, c.z, m, 'incoming-adj');
+    }
+  }
+
+  /**
+   * Сброс всех ячеек (при старте новой фазы и т.п.)
+   */
+  clearAll() {
+    this._clearAllCells();
+    this.clearPreview();
+    this.clearShotTarget();
+  }
+
+  /**
+   * Освободить ресурсы Three.js (при уничтожении компонента).
+   */
+  dispose() {
+    if (this._raf) cancelAnimationFrame(this._raf);
+    this._ro.disconnect();
+    this.clearAll();
+    // Освободить метки
+    if (this._labelsGroup) {
+      this._labelsGroup.traverse(obj => {
+        if (obj.material) { if (obj.material.map) obj.material.map.dispose(); obj.material.dispose(); }
+      });
+      this._scene.remove(this._labelsGroup);
+    }
+    // Освободить оси
+    if (this._axesGroup) {
+      this._axesGroup.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) { if (obj.material.map) obj.material.map.dispose(); obj.material.dispose(); }
+      });
+      this._scene.remove(this._axesGroup);
+    }
+    this._renderer.dispose();
+    this._renderer.domElement.remove();
+  }
+};
