@@ -16,12 +16,15 @@ window.CubeRenderer = class CubeRenderer {
   // ─── Конструктор ──────────────────────────────────────────────────────────
 
   constructor(container, options) {
-    this._container = container;
-    this._cells     = new Map();   // key → [{mesh, tag}]
-    this._previews  = [];
-    this._targets   = [];
-    this._time      = 0;
-    this._raf       = null;
+    this._container   = container;
+    this._cells       = new Map();   // key → [{mesh, tag}]
+    this._previews    = [];
+    this._targets     = [];
+    this._arrows      = [];          // ArrowHelper для осей активного самолёта
+    this._time        = 0;
+    this._raf         = null;
+    this._viewMode    = 1;           // 1=обычный, 2=режим целей
+    this._shotHistory = [];          // история выстрелов для перерисовки
 
     // Начальный угол камеры
     this._theta  = Math.PI * 0.22;   // горизонталь
@@ -152,40 +155,74 @@ window.CubeRenderer = class CubeRenderer {
   }
 
   // ─── Метки осей ──────────────────────────────────────────────────────────
-  // Все три оси исходят из угла (0,0,0) — начала координат куба.
   // Спрайты всегда смотрят на камеру (THREE.Sprite).
+  // Названия X/Y/Z рендерятся здесь же, чтобы они были на всех кубах.
 
   _buildLabels() {
     const g = new THREE.Group();
 
-    // X: числа 1–10, вдоль оси +threeX от угла (y=−1, z=−1.2)
+    // ── X: числа 1–10 вдоль нижнего переднего ребра куба ─────────────────
     for (let gx = 1; gx <= 10; gx++) {
-      const sp = this._makeTextSprite(String(gx), '#ffffff', null, 34);
-      sp.position.set(gx - 0.5, -1.05, -1.2);
-      sp.scale.set(1.1, 0.55, 1);
+      const sp = this._makeTextSprite(String(gx), '#ffffff', null, 46);
+      sp.position.set(gx - 0.5, -0.65, -0.75);
+      sp.scale.set(1.4, 0.70, 1);
       g.add(sp);
     }
+    // Название оси X
+    const xLbl = this._makeTextSprite('X', '#88bbff', null, 58);
+    xLbl.position.set(11.2, -0.65, -0.75);
+    xLbl.scale.set(1.3, 0.85, 1);
+    g.add(xLbl);
 
-    // Y: буквы A–J, вдоль оси +threeZ (=gameY) от угла (x=−1.2, y=−1)
+    // ── Y: буквы A–J вдоль левого переднего ребра куба ───────────────────
     for (let gy = 1; gy <= 10; gy++) {
-      const sp = this._makeTextSprite(Planes.Y_LETTERS[gy - 1], '#ffffff', null, 34);
-      sp.position.set(-1.2, -1.05, gy - 0.5);
-      sp.scale.set(1.1, 0.55, 1);
+      const sp = this._makeTextSprite(Planes.Y_LETTERS[gy - 1], '#ffffff', null, 46);
+      sp.position.set(-0.75, -0.65, gy - 0.5);
+      sp.scale.set(1.4, 0.70, 1);
       g.add(sp);
     }
+    // Название оси Y
+    const yLbl = this._makeTextSprite('Y', '#88bbff', null, 58);
+    yLbl.position.set(-0.75, -0.65, 11.2);
+    yLbl.scale.set(1.3, 0.85, 1);
+    g.add(yLbl);
 
-    // Z: цвета с цветными квадратиками, вдоль оси +threeY (=gameZ высота)
-    // от угла (x=−2.8, z=−0.5)
+    // ── Z: только цветные квадратики вдоль левого вертикального ребра ────
     for (let gz = 1; gz <= 10; gz++) {
       const col = Planes.COLORS[gz - 1];
-      const sp  = this._makeTextSprite(col.name, '#ffffff', col.hex, 28);
-      sp.position.set(-2.9, gz - 0.5, -0.5);
-      sp.scale.set(3.2, 0.60, 1);
+      const sp  = this._makeColorDotSprite(col.hex);
+      sp.position.set(-1.3, gz - 0.5, -0.5);
+      sp.scale.set(0.72, 0.72, 1);
       g.add(sp);
     }
+    // Название оси Z
+    const zLbl = this._makeTextSprite('Z', '#88bbff', null, 58);
+    zLbl.position.set(-1.3, 11.2, -0.5);
+    zLbl.scale.set(1.3, 0.85, 1);
+    g.add(zLbl);
 
     this._scene.add(g);
     this._labelsGroup = g;
+  }
+
+  /** Создаёт Sprite с цветным квадратиком (без текста). */
+  _makeColorDotSprite(hexColor) {
+    const SZ  = 64;
+    const cv  = document.createElement('canvas');
+    cv.width  = SZ;
+    cv.height = SZ;
+    const ctx = cv.getContext('2d');
+    const pad = 6;
+    ctx.fillStyle = hexColor;
+    ctx.fillRect(pad, pad, SZ - pad * 2, SZ - pad * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.40)';
+    ctx.lineWidth   = 2;
+    ctx.strokeRect(pad, pad, SZ - pad * 2, SZ - pad * 2);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.needsUpdate = true;
+    return new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })
+    );
   }
 
   /** Создаёт Sprite с текстом (и необязательным цветным квадратиком).
@@ -280,11 +317,7 @@ window.CubeRenderer = class CubeRenderer {
       }
       g.add(cone);
 
-      // Подпись оси (белый спрайт всегда смотрит на камеру)
-      const sp = this._makeTextSprite(ax.label, '#ffffff', null, 42);
-      sp.position.copy(ax.dir.clone().multiplyScalar(LABEL_DIST));
-      sp.scale.set(1.2, 0.60, 1);
-      g.add(sp);
+      // Подписи X/Y/Z добавляются в _buildLabels(), здесь не нужны
     }
 
     this._scene.add(g);
@@ -448,6 +481,48 @@ window.CubeRenderer = class CubeRenderer {
     }
   }
 
+  /**
+   * Показать цветные стрелки осей из центра самолёта (или прицела).
+   * @param {Array<{x,y,z}>} cells — ячейки самолёта
+   * @param {boolean}        small — уменьшенные стрелки (для прицела)
+   */
+  showAxisArrows(cells, small = false) {
+    this.clearAxisArrows();
+
+    // Центр в игровых координатах
+    const cx = cells.reduce((s, c) => s + c.x, 0) / cells.length;
+    const cy = cells.reduce((s, c) => s + c.y, 0) / cells.length;
+    const cz = cells.reduce((s, c) => s + c.z, 0) / cells.length;
+    // Перевод в Three.js: threeX=gameX-0.5, threeY=gameZ-0.5, threeZ=gameY-0.5
+    const origin = new THREE.Vector3(cx - 0.5, cz - 0.5, cy - 0.5);
+
+    const len     = small ? 1.2 : 2.5;
+    const headLen = small ? 0.25 : 0.55;
+    const headW   = small ? 0.12 : 0.24;
+
+    // X (red) — вдоль threeX
+    const ax = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), origin, len, 0xff3333, headLen, headW);
+    // Y (green) — вдоль threeZ (=gameY)
+    const ay = new THREE.ArrowHelper(new THREE.Vector3(0,0,1), origin, len, 0x33cc55, headLen, headW);
+    // Z (blue) — вдоль threeY (=gameZ)
+    const az = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), origin, len, 0x4488ff, headLen, headW);
+
+    this._arrows = [ax, ay, az];
+    for (const a of this._arrows) this._scene.add(a);
+  }
+
+  /** Убрать стрелки осей */
+  clearAxisArrows() {
+    for (const a of this._arrows) {
+      this._scene.remove(a);
+      a.line.geometry.dispose();
+      a.line.material.dispose();
+      a.cone.geometry.dispose();
+      a.cone.material.dispose();
+    }
+    this._arrows = [];
+  }
+
   /** Убрать прицел */
   clearShotTarget() {
     for (const m of this._targets) { this._scene.remove(m); CubeRenderer._disposeMesh(m); }
@@ -456,42 +531,89 @@ window.CubeRenderer = class CubeRenderer {
 
   /**
    * Отметить результат моего выстрела — рисуется на кубе ПРОТИВНИКА.
-   * @param {Array<{x,y,z}>} pattern        — все 7 ячеек паттерна
-   * @param {Array<{x,y,z}>} hits           — ячейки с попаданием
-   * @param {Array<{cells}>} killedPlanes   — уничтоженные самолёты
-   * @param {Array<{x,y,z}>} adjacent       — зона вокруг уничтоженных
+   * Сохраняет историю для поддержки переключения режимов просмотра.
    */
   markShot(pattern, hits, killedPlanes, adjacent) {
-    const hitKeys  = new Set(hits.map(c => Planes.cellKey(c)));
-    const killKeys = new Set();
-    for (const p of killedPlanes) for (const c of p.cells) killKeys.add(Planes.cellKey(c));
+    this._shotHistory.push({ pattern, hits, killedPlanes, adjacent });
+    this._renderEnemyShots();
+  }
 
-    for (const c of pattern) {
-      const k = Planes.cellKey(c);
-      let m;
-      if (killKeys.has(k)) {
-        m = this._solid(0xff2200, 0.95, true);
-        m.add(this._wire(0xff6644, 1.0));
-      } else if (hitKeys.has(k)) {
-        m = this._solid(0xff3a3a, 0.85, true);
-        m.add(this._wire(0xff6666, 0.90));
-      } else {
-        m = this._solid(0x2a3d55, 0.30);
-        m.add(this._wire(0x3a4d66, 0.40));
+  /** Переключить режим просмотра куба противника и перерисовать выстрелы. */
+  setViewMode(mode) {
+    this._viewMode = mode;
+    this._renderEnemyShots();
+  }
+
+  /** Перерисовать все выстрелы по текущему _viewMode. */
+  _renderEnemyShots() {
+    this._clearTag('shot');
+    this._clearTag('shot-adj');
+    this._clearTag('mode2-bg');
+
+    if (this._viewMode === 2) {
+      // Собрать все уже поражённые/закрытые клетки
+      const usedKeys = new Set();
+      for (const h of this._shotHistory) {
+        for (const c of h.pattern) usedKeys.add(`${c.x},${c.y},${c.z}`);
+        for (const c of h.adjacent) usedKeys.add(`${c.x},${c.y},${c.z}`);
       }
-      this._addCell(c.x, c.y, c.z, m, 'shot');
-    }
 
-    // Зона отчуждения
-    for (const c of adjacent) {
-      const m = this._solid(0x111122, 0.45);
-      m.add(this._wire(0x222244, 0.35));
-      this._addCell(c.x, c.y, c.z, m, 'shot-adj');
+      // Яркие клетки = ещё не стреляли
+      for (let x = 1; x <= 10; x++) {
+        for (let y = 1; y <= 10; y++) {
+          for (let z = 1; z <= 10; z++) {
+            if (!usedKeys.has(`${x},${y},${z}`)) {
+              const m = this._solid(0x44aaff, 0.22);
+              m.add(this._wire(0x88ccff, 0.50));
+              this._addCell(x, y, z, m, 'mode2-bg');
+            }
+          }
+        }
+      }
+
+      // Тёмные клетки = уже использованные
+      for (const h of this._shotHistory) {
+        for (const c of h.pattern) {
+          const m = this._solid(0x1a2840, 0.30);
+          m.add(this._wire(0x253444, 0.20));
+          this._addCell(c.x, c.y, c.z, m, 'shot');
+        }
+        for (const c of h.adjacent) {
+          const m = this._solid(0x141e2a, 0.22);
+          this._addCell(c.x, c.y, c.z, m, 'shot-adj');
+        }
+      }
+    } else {
+      // Режим 1: обычный
+      for (const h of this._shotHistory) {
+        const hitKeys  = new Set(h.hits.map(c => `${c.x},${c.y},${c.z}`));
+        const killKeys = new Set();
+        for (const p of h.killedPlanes) for (const c of p.cells) killKeys.add(`${c.x},${c.y},${c.z}`);
+
+        for (const c of h.pattern) {
+          const k = `${c.x},${c.y},${c.z}`;
+          let m;
+          if (killKeys.has(k) || hitKeys.has(k)) {
+            m = this._solid(0xff8800, 0.90, true);
+            m.add(this._wire(0xffaa44, 1.0));
+          } else {
+            m = this._solid(0x2a3d55, 0.30);
+            m.add(this._wire(0x3a4d66, 0.40));
+          }
+          this._addCell(c.x, c.y, c.z, m, 'shot');
+        }
+
+        for (const c of h.adjacent) {
+          const m = this._solid(0x2a3d55, 0.22);
+          m.add(this._wire(0x3a4d66, 0.28));
+          this._addCell(c.x, c.y, c.z, m, 'shot-adj');
+        }
+      }
     }
   }
 
   /**
-   * Отметить входящий удар — рисуется на МОЁМкубе.
+   * Отметить входящий удар — рисуется на МОЁМ кубе.
    * Вызывается когда соперник стреляет.
    */
   markIncoming(pattern, hits, killedPlanes, adjacent) {
@@ -502,22 +624,20 @@ window.CubeRenderer = class CubeRenderer {
     for (const c of pattern) {
       const k = Planes.cellKey(c);
       let m;
-      if (killKeys.has(k)) {
-        m = this._solid(0xff2200, 0.90, true);
-        m.add(this._wire(0xff7755, 1.0));
-      } else if (hitKeys.has(k)) {
-        m = this._solid(0xff5500, 0.75, true);
-        m.add(this._wire(0xff8844, 0.90));
+      if (killKeys.has(k) || hitKeys.has(k)) {
+        m = this._solid(0xff8800, 0.82, true);
+        m.add(this._wire(0xffaa44, 0.95));
       } else {
         m = this._solid(0x1a2233, 0.25);
+        m.add(this._wire(0x253344, 0.30));
       }
       this._addCell(c.x, c.y, c.z, m, 'incoming');
     }
 
-    // Зона вокруг уничтоженного
+    // Зона вокруг уничтоженного — цвет как у промаха
     for (const c of adjacent) {
-      const m = this._solid(0x0f0f22, 0.40);
-      m.add(this._wire(0x1a1a33, 0.30));
+      const m = this._solid(0x1a2233, 0.22);
+      m.add(this._wire(0x253344, 0.25));
       this._addCell(c.x, c.y, c.z, m, 'incoming-adj');
     }
   }
@@ -529,6 +649,9 @@ window.CubeRenderer = class CubeRenderer {
     this._clearAllCells();
     this.clearPreview();
     this.clearShotTarget();
+    this.clearAxisArrows();
+    this._shotHistory = [];
+    this._viewMode    = 1;
   }
 
   /**

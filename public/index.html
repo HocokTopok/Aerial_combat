@@ -43,130 +43,52 @@
           <span class="zoom-pct" id="pz-pct" title="Нажмите для сброса">100%</span>
           <button class="btn-zoom" id="pz-in"  title="Приблизить">+</button>
         </div>
-        <div id="placement-cube-hint" class="cube-hint">
-          Введите координаты носа самолёта и нажмите <b>Разместить</b>
-        </div>
       </div>
 
       <!-- Панель управления -->
       <aside class="placement-panel">
-        <div class="panel-title">Эскадрилья</div>
+        <div class="panel-title">ЭСКАДРИЛЬЯ</div>
+
+        <button id="btn-randomize" class="btn-randomize">⚡ Рандомная расстановка</button>
 
         <div id="fleet-list" class="fleet-list">
-          <!-- Бомбардировщик (1 шт) -->
-          <div class="fleet-group">
-            <div class="fleet-group-label">Бомбардировщик <span class="fleet-count">×1</span></div>
-            <div class="fleet-item" data-plane-id="large-0" data-type="large" data-index="0">
-              <div class="fleet-item-name">
-                <span class="plane-icon large-icon">▬▬</span>
-                Бомбардировщик
-              </div>
-              <div class="fleet-item-coords">
-                <label>X <select class="coord-sel sel-x" data-plane-id="large-0"></select></label>
-                <label>Y <select class="coord-sel sel-y" data-plane-id="large-0"></select></label>
-                <label>Z <select class="coord-sel sel-z" data-plane-id="large-0"></select></label>
-              </div>
-              <div class="fleet-item-actions">
-                <button class="btn-place" data-plane-id="large-0">Разместить</button>
-                <span class="placement-status" data-plane-id="large-0">○</span>
-              </div>
-            </div>
+          <div class="fleet-item" data-plane-id="large-0"  data-type="large">
+            <span class="plane-type-badge large-badge">▬▬▬</span>
+            <span class="fleet-item-label">Бомбардировщик</span>
           </div>
+          <div class="fleet-item" data-plane-id="medium-0" data-type="medium">
+            <span class="plane-type-badge medium-badge">—✚—</span>
+            <span class="fleet-item-label">Перехватчик 1</span>
+          </div>
+          <div class="fleet-item" data-plane-id="medium-1" data-type="medium">
+            <span class="plane-type-badge medium-badge">—✚—</span>
+            <span class="fleet-item-label">Перехватчик 2</span>
+          </div>
+          <div class="fleet-item" data-plane-id="small-0"  data-type="small">
+            <span class="plane-type-badge small-badge">──</span>
+            <span class="fleet-item-label">Истребитель 1</span>
+          </div>
+          <div class="fleet-item" data-plane-id="small-1"  data-type="small">
+            <span class="plane-type-badge small-badge">──</span>
+            <span class="fleet-item-label">Истребитель 2</span>
+          </div>
+          <div class="fleet-item" data-plane-id="small-2"  data-type="small">
+            <span class="plane-type-badge small-badge">──</span>
+            <span class="fleet-item-label">Истребитель 3</span>
+          </div>
+        </div>
 
-          <!-- Перехватчики (2 шт) -->
-          <div class="fleet-group">
-            <div class="fleet-group-label">Перехватчик <span class="fleet-count">×2</span></div>
-            <div class="fleet-item" data-plane-id="medium-0" data-type="medium" data-index="0">
-              <div class="fleet-item-name">
-                <span class="plane-icon medium-icon">—✚—</span>
-                Перехватчик 1
-              </div>
-              <div class="fleet-item-coords">
-                <label>X <select class="coord-sel sel-x" data-plane-id="medium-0"></select></label>
-                <label>Y <select class="coord-sel sel-y" data-plane-id="medium-0"></select></label>
-                <label>Z <select class="coord-sel sel-z" data-plane-id="medium-0"></select></label>
-              </div>
-              <div class="fleet-item-actions">
-                <button class="btn-place" data-plane-id="medium-0">Разместить</button>
-                <span class="placement-status" data-plane-id="medium-0">○</span>
-              </div>
-            </div>
-            <div class="fleet-item" data-plane-id="medium-1" data-type="medium" data-index="1">
-              <div class="fleet-item-name">
-                <span class="plane-icon medium-icon">—✚—</span>
-                Перехватчик 2
-              </div>
-              <div class="fleet-item-coords">
-                <label>X <select class="coord-sel sel-x" data-plane-id="medium-1"></select></label>
-                <label>Y <select class="coord-sel sel-y" data-plane-id="medium-1"></select></label>
-                <label>Z <select class="coord-sel sel-z" data-plane-id="medium-1"></select></label>
-              </div>
-              <div class="fleet-item-actions">
-                <button class="btn-place" data-plane-id="medium-1">Разместить</button>
-                <span class="placement-status" data-plane-id="medium-1">○</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Истребители (3 шт) -->
-          <div class="fleet-group">
-            <div class="fleet-group-label">Истребитель <span class="fleet-count">×3</span></div>
-            <div class="fleet-item" data-plane-id="small-0" data-type="small" data-index="0">
-              <div class="fleet-item-name">
-                <span class="plane-icon small-icon">──</span>
-                Истребитель 1
-              </div>
-              <div class="fleet-item-coords">
-                <label>X <select class="coord-sel sel-x" data-plane-id="small-0"></select></label>
-                <label>Y <select class="coord-sel sel-y" data-plane-id="small-0"></select></label>
-                <label>Z <select class="coord-sel sel-z" data-plane-id="small-0"></select></label>
-              </div>
-              <div class="fleet-item-actions">
-                <button class="btn-place" data-plane-id="small-0">Разместить</button>
-                <span class="placement-status" data-plane-id="small-0">○</span>
-              </div>
-            </div>
-            <div class="fleet-item" data-plane-id="small-1" data-type="small" data-index="1">
-              <div class="fleet-item-name">
-                <span class="plane-icon small-icon">──</span>
-                Истребитель 2
-              </div>
-              <div class="fleet-item-coords">
-                <label>X <select class="coord-sel sel-x" data-plane-id="small-1"></select></label>
-                <label>Y <select class="coord-sel sel-y" data-plane-id="small-1"></select></label>
-                <label>Z <select class="coord-sel sel-z" data-plane-id="small-1"></select></label>
-              </div>
-              <div class="fleet-item-actions">
-                <button class="btn-place" data-plane-id="small-1">Разместить</button>
-                <span class="placement-status" data-plane-id="small-1">○</span>
-              </div>
-            </div>
-            <div class="fleet-item" data-plane-id="small-2" data-type="small" data-index="2">
-              <div class="fleet-item-name">
-                <span class="plane-icon small-icon">──</span>
-                Истребитель 3
-              </div>
-              <div class="fleet-item-coords">
-                <label>X <select class="coord-sel sel-x" data-plane-id="small-2"></select></label>
-                <label>Y <select class="coord-sel sel-y" data-plane-id="small-2"></select></label>
-                <label>Z <select class="coord-sel sel-z" data-plane-id="small-2"></select></label>
-              </div>
-              <div class="fleet-item-actions">
-                <button class="btn-place" data-plane-id="small-2">Разместить</button>
-                <span class="placement-status" data-plane-id="small-2">○</span>
-              </div>
-            </div>
-          </div>
+        <div class="placement-keys-hint">
+          <div class="hint-row"><span class="hint-key">W / S</span><span>ось X</span></div>
+          <div class="hint-row"><span class="hint-key">D / A</span><span>ось Y</span></div>
+          <div class="hint-row"><span class="hint-key">SPC / SHIFT</span><span>ось Z</span></div>
+          <div class="hint-row"><span class="hint-key">Q / E / R</span><span>поворот X/Y/Z</span></div>
         </div>
 
         <div id="placement-error" class="error-msg hidden"></div>
 
-        <button id="btn-ready" class="btn-primary btn-ready" disabled>
-          ГОТОВ
-        </button>
-        <p id="placement-waiting" class="waiting-text hidden">
-          Ожидаем соперника...
-        </p>
+        <button id="btn-ready" class="btn-primary btn-ready" disabled>ГОТОВ</button>
+        <p id="placement-waiting" class="waiting-text hidden">Ожидаем соперника...</p>
       </aside>
     </div>
   </div>
@@ -200,53 +122,19 @@
           <button class="btn-zoom" id="ez-out" title="Отдалить">−</button>
           <span class="zoom-pct" id="ez-pct" title="Нажмите для сброса">100%</span>
           <button class="btn-zoom" id="ez-in"  title="Приблизить">+</button>
+          <button id="btn-view-mode" class="btn-view-mode" title="Переключить режим отображения">Режим: выстрелы</button>
         </div>
       </div>
     </div>
 
     <!-- Панель выстрела -->
     <div id="shot-panel" class="shot-panel">
-      <div class="shot-selectors">
-        <div class="shot-sel-group">
-          <label class="shot-label">X</label>
-          <select id="shot-x" class="shot-sel">
-            <option value="">—</option>
-            <option>1</option><option>2</option><option>3</option>
-            <option>4</option><option>5</option><option>6</option>
-            <option>7</option><option>8</option><option>9</option>
-            <option>10</option>
-          </select>
-        </div>
-        <div class="shot-sel-group">
-          <label class="shot-label">Y</label>
-          <select id="shot-y" class="shot-sel">
-            <option value="">—</option>
-            <option>A</option><option>B</option><option>C</option>
-            <option>D</option><option>E</option><option>F</option>
-            <option>G</option><option>H</option><option>I</option>
-            <option>J</option>
-          </select>
-        </div>
-        <div class="shot-sel-group">
-          <label class="shot-label">Z</label>
-          <select id="shot-z" class="shot-sel">
-            <option value="">—</option>
-            <option value="1">Красный</option>
-            <option value="2">Оранжевый</option>
-            <option value="3">Жёлтый</option>
-            <option value="4">Зелёный</option>
-            <option value="5">Бирюзовый</option>
-            <option value="6">Голубой</option>
-            <option value="7">Синий</option>
-            <option value="8">Фиолетовый</option>
-            <option value="9">Белый</option>
-            <option value="10">Серый</option>
-          </select>
-        </div>
-        <button id="btn-fire" class="btn-primary btn-fire" disabled>
-          ОГОНЬ
-        </button>
+      <div class="shot-info-row">
+        <span class="shot-label">Прицел:</span>
+        <span id="shot-coords-text" class="shot-coords-value">—</span>
+        <span class="shot-hint-inline">W/S: X &nbsp;·&nbsp; D/A: Y &nbsp;·&nbsp; SPC/SHIFT: Z</span>
       </div>
+      <button id="btn-fire" class="btn-primary btn-fire" disabled>ОГОНЬ</button>
       <div id="shot-preview-label" class="shot-preview-label"></div>
     </div>
 

@@ -8,19 +8,21 @@
 
   // ─── Состояние ────────────────────────────────────────────────────────────
 
-  let ws          = null;
-  let playerIdx   = -1;          // 0 или 1
-  let phase       = 'loading';   // loading | placement | battle | finished
+  let ws        = null;
+  let playerIdx = -1;
+  let phase     = 'loading';   // loading | placement | battle | finished
 
   // Расстановка
-  const placedPlanes  = {};      // planeId → { type, nose, cells, rot }
-  const planeRotations = {};     // planeId → матрица вращения 3×3
-  let placementCube  = null;
+  const planeNoses     = {};   // planeId → {x,y,z}
+  const planeRotations = {};   // planeId → матрица 3×3
+  let activePlaneId    = null;
+  let placementCube    = null;
 
   // Бой
   let myCube    = null;
   let enemyCube = null;
   let myTurn    = false;
+  let shotNose  = { x: 5, y: 5, z: 5 };
   let notifTimer = null;
 
   // ─── DOM-утилиты ──────────────────────────────────────────────────────────
@@ -32,11 +34,9 @@
   // ─── Старт ────────────────────────────────────────────────────────────────
 
   document.addEventListener('DOMContentLoaded', () => {
-    populatePlacementDropdowns();
-    addArrowButtons();
-    addRotationButtons();
     setupPlacementHandlers();
     setupBattleHandlers();
+    setupKeyboard();
     connectWS();
   });
 
@@ -105,7 +105,6 @@
   function handleMessage(msg) {
     switch (msg.type) {
 
-      // ── Подключение ─────────────────────────────────────────────────────
       case 'assigned':
         playerIdx = msg.playerIndex;
         $('loading-text').textContent =
@@ -125,14 +124,12 @@
         $('loading-text').textContent = 'Соперник отключился. Обновите страницу.';
         break;
 
-      // ── Расстановка ─────────────────────────────────────────────────────
       case 'placement_start':
         phase = 'placement';
         startPlacement();
         break;
 
       case 'placement_ok':
-        // Сервер принял расстановку, ждём соперника
         $('btn-ready').disabled    = true;
         $('btn-ready').textContent = 'ОЖИДАЕМ СОПЕРНИКА...';
         $('placement-waiting').classList.remove('hidden');
@@ -140,14 +137,12 @@
         break;
 
       case 'placement_error':
-        // Сервер отклонил (на случай расхождения валидации)
         showPlacementError(msg.message || 'Ошибка расстановки');
         $('btn-ready').disabled    = false;
         $('btn-ready').textContent = 'ГОТОВ';
         $('placement-waiting').classList.add('hidden');
         break;
 
-      // ── Бой ─────────────────────────────────────────────────────────────
       case 'battle_start':
         phase = 'battle';
         startBattle(msg.firstTurn);
@@ -164,12 +159,9 @@
         break;
 
       case 'shot_result':
-        // Результат моего выстрела → рисуем на кубе противника
         if (enemyCube) {
           enemyCube.clearShotTarget();
-          enemyCube.markShot(
-            msg.pattern, msg.hits, msg.killed, msg.killedAdjacent
-          );
+          enemyCube.markShot(msg.pattern, msg.hits, msg.killed, msg.killedAdjacent);
         }
         if (msg.killed.length > 0) {
           showNotification(
@@ -184,11 +176,8 @@
         break;
 
       case 'incoming_shot':
-        // Выстрел противника → рисуем на моём кубе
         if (myCube) {
-          myCube.markIncoming(
-            msg.pattern, msg.hits, msg.killed, msg.killedAdjacent
-          );
+          myCube.markIncoming(msg.pattern, msg.hits, msg.killed, msg.killedAdjacent);
         }
         if (msg.killed.length > 0) {
           showNotification(
@@ -200,7 +189,6 @@
         }
         break;
 
-      // ── Финал ───────────────────────────────────────────────────────────
       case 'game_over':
         phase = 'finished';
         setTimeout(() => showEndScreen(msg.result === 'win'), 600);
@@ -212,296 +200,261 @@
     }
   }
 
+  // ─── КЛАВИАТУРА ──────────────────────────────────────────────────────────
+
+  // W/S → X±, D/A → Y±, Space/Shift → Z±
+  const MOVE_KEYS = {
+    KeyW:       { axis: 'x', dir:  1 },
+    KeyS:       { axis: 'x', dir: -1 },
+    KeyD:       { axis: 'y', dir:  1 },
+    KeyA:       { axis: 'y', dir: -1 },
+    Space:      { axis: 'z', dir:  1 },
+    ShiftLeft:  { axis: 'z', dir: -1 },
+    ShiftRight: { axis: 'z', dir: -1 },
+  };
+
+  // Q → Rx, E → Ry, R → Rz
+  const ROT_KEYS = {
+    KeyQ: Planes.ROT_X_POS,
+    KeyE: Planes.ROT_Y_POS,
+    KeyR: Planes.ROT_Z_POS,
+  };
+
+  function setupKeyboard() {
+    document.addEventListener('keydown', e => {
+      // Не перехватываем клавиши когда фокус на кнопке/элементе ввода
+      if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+
+      if (phase === 'placement') handlePlacementKey(e);
+      else if (phase === 'battle') handleBattleKey(e);
+    });
+  }
+
+  function handlePlacementKey(e) {
+    if (!activePlaneId || !placementCube) return;
+
+    const move = MOVE_KEYS[e.code];
+    const rot  = ROT_KEYS[e.code];
+    if (!move && !rot) return;
+
+    e.preventDefault();
+
+    if (move) {
+      const nose = planeNoses[activePlaneId] || { x: 5, y: 5, z: 5 };
+      planeNoses[activePlaneId] = {
+        ...nose,
+        [move.axis]: Math.max(1, Math.min(10, nose[move.axis] + move.dir)),
+      };
+    }
+
+    if (rot) {
+      planeRotations[activePlaneId] = Planes.mulMat3(rot, getRotMat(activePlaneId));
+    }
+
+    updateActivePlaneDisplay();
+  }
+
+  function handleBattleKey(e) {
+    if (!myTurn || !enemyCube) return;
+    const move = MOVE_KEYS[e.code];
+    if (!move) return;
+    e.preventDefault();
+    shotNose = {
+      ...shotNose,
+      [move.axis]: Math.max(1, Math.min(10, shotNose[move.axis] + move.dir)),
+    };
+    updateShotPreview();
+  }
+
   // ─── РАССТАНОВКА ─────────────────────────────────────────────────────────
 
-  // ─── ВРАЩЕНИЕ САМОЛЁТОВ ───────────────────────────────────────────────────
-
-  /** Текущая матрица вращения самолёта (Identity если ещё не вращали) */
   function getRotMat(planeId) {
     return planeRotations[planeId] || Planes.IDENTITY_MAT;
   }
 
-  /** Добавить кнопки стрелок перемещения в каждый fleet-item */
-  function addArrowButtons() {
-    qAll('.fleet-item').forEach(item => {
-      const id  = item.dataset.planeId;
-      const div = document.createElement('div');
-      div.className = 'fleet-item-arrows';
-      div.innerHTML =
-        `<span class="arrows-label">Движение:</span>` +
-        ['x','y','z'].map(ax =>
-          `<button class="btn-arrow" data-plane-id="${id}" data-axis="${ax}" data-dir="-1">${ax.toUpperCase()}−</button>` +
-          `<button class="btn-arrow" data-plane-id="${id}" data-axis="${ax}" data-dir="1">${ax.toUpperCase()}+</button>`
-        ).join('');
-      // Вставляем перед блоком вращения (или перед actions если rot ещё нет)
-      const ref = item.querySelector('.fleet-item-rot') || item.querySelector('.fleet-item-actions');
-      item.insertBefore(div, ref);
-    });
+  function getType(planeId) {
+    return q(`.fleet-item[data-plane-id="${planeId}"]`)?.dataset.type || null;
   }
 
-  /** Переместить нос самолёта на 1 шаг по оси */
-  function handleArrow(planeId, axis, dir) {
-    const sel = q(`.sel-${axis}[data-plane-id="${planeId}"]`);
-    if (!sel) return;
-
-    const curr = sel.selectedIndex;
-    // Если пусто и двигаем назад — ничего не делаем
-    if (curr < 1 && dir < 0) return;
-    const base = curr < 1 ? 0 : curr;
-    const next = base + dir;
-    if (next < 1 || next >= sel.options.length) return;
-
-    sel.selectedIndex = next;
-
-    // Если самолёт уже был размещён — сбросить его
-    if (placedPlanes[planeId]) {
-      if (placementCube) placementCube._clearTag('own-' + planeId);
-      delete placedPlanes[planeId];
-      resetFleetItemStatus(planeId);
-      checkAllPlaced();
-    }
-    updatePreview(planeId);
+  /** Список данных уже размещённых самолётов, кроме excludeId */
+  function otherPlacedList(excludeId) {
+    const all = ['large-0','medium-0','medium-1','small-0','small-1','small-2'];
+    return all
+      .filter(id => id !== excludeId && planeNoses[id])
+      .map(id => {
+        const type  = getType(id);
+        const rot   = getRotMat(id);
+        const cells = Planes.getCells(planeNoses[id], type, rot);
+        return { type, nose: planeNoses[id], cells, rot };
+      });
   }
 
-  /** Добавить кнопки вращения в каждый fleet-item (вызывается один раз) */
-  function addRotationButtons() {
-    qAll('.fleet-item').forEach(item => {
-      const id = item.dataset.planeId;
-      const div = document.createElement('div');
-      div.className = 'fleet-item-rot';
-      div.innerHTML =
-        `<span class="rot-label">Поворот:</span>` +
-        ['x','y','z'].map(ax =>
-          `<button class="btn-rot" data-plane-id="${id}" data-axis="${ax}" data-dir="-1">${ax.toUpperCase()}↺</button>` +
-          `<button class="btn-rot" data-plane-id="${id}" data-axis="${ax}" data-dir="1">${ax.toUpperCase()}↻</button>`
-        ).join('');
-      const actions = item.querySelector('.fleet-item-actions');
-      item.insertBefore(div, actions);
-    });
-  }
-
-  /** Применить поворот на 90° вокруг оси к самолёту */
-  function handleRotation(planeId, axis, dir) {
-    const KEY = {
-      'x-1': Planes.ROT_X_NEG, 'x1': Planes.ROT_X_POS,
-      'y-1': Planes.ROT_Y_NEG, 'y1': Planes.ROT_Y_POS,
-      'z-1': Planes.ROT_Z_NEG, 'z1': Planes.ROT_Z_POS,
-    };
-    const step = KEY[axis + dir];
-    if (!step) return;
-    planeRotations[planeId] = Planes.mulMat3(step, getRotMat(planeId));
-
-    // Если самолёт уже был размещён — сбросить (вращение делает расстановку невалидной)
-    if (placedPlanes[planeId]) {
-      if (placementCube) placementCube._clearTag('own-' + planeId);
-      delete placedPlanes[planeId];
-      resetFleetItemStatus(planeId);
-      checkAllPlaced();
-    }
-    updatePreview(planeId);
-  }
-
-  /** Сбросить визуальный статус элемента флота */
-  function resetFleetItemStatus(planeId) {
-    const item   = q(`.fleet-item[data-plane-id="${planeId}"]`);
-    const status = q(`.placement-status[data-plane-id="${planeId}"]`);
-    if (item)   { item.classList.remove('placed', 'invalid'); }
-    if (status) { status.textContent = '○'; status.className = 'placement-status'; }
-  }
-
-  /** Заполнить дропдауны на экране расстановки */
-  function populatePlacementDropdowns() {
-    qAll('.sel-x').forEach(sel => {
-      sel.innerHTML = '<option value="">—</option>';
-      for (let i = 1; i <= 10; i++) {
-        sel.innerHTML += `<option value="${i}">${i}</option>`;
+  /** Выбрать самолёт как активный */
+  function selectPlane(planeId) {
+    if (activePlaneId && activePlaneId !== planeId) {
+      // Убрать превью/стрелки предыдущего, показать синим если валиден
+      if (placementCube) {
+        placementCube.clearPreview();
+        placementCube.clearAxisArrows();
       }
-    });
+      showPlaneAsOwn(activePlaneId);
+      updateFleetItemStatus(activePlaneId);
+    }
 
-    qAll('.sel-y').forEach(sel => {
-      sel.innerHTML = '<option value="">—</option>';
-      Planes.Y_LETTERS.forEach(l => {
-        sel.innerHTML += `<option value="${l}">${l}</option>`;
-      });
-    });
+    activePlaneId = planeId;
 
-    qAll('.sel-z').forEach(sel => {
-      sel.innerHTML = '<option value="">—</option>';
-      Planes.COLORS.forEach((c, i) => {
-        sel.innerHTML += `<option value="${i + 1}">${c.name}</option>`;
-      });
-    });
+    // Инициализировать позицию если ещё нет
+    if (!planeNoses[planeId]) {
+      planeNoses[planeId] = { x: 5, y: 5, z: 5 };
+    }
+
+    // Убрать синий меш этого самолёта (заменим на превью)
+    if (placementCube) placementCube._clearTag('own-' + planeId);
+
+    // Подсветить активный в списке
+    qAll('.fleet-item').forEach(el => el.classList.remove('active'));
+    const item = q(`.fleet-item[data-plane-id="${planeId}"]`);
+    if (item) item.classList.add('active');
+
+    updateActivePlaneDisplay();
+  }
+
+  /** Показать самолёт синим (собственный), если его позиция валидна */
+  function showPlaneAsOwn(planeId) {
+    if (!placementCube || !planeNoses[planeId]) return;
+    const type   = getType(planeId);
+    const rot    = getRotMat(planeId);
+    const result = Planes.validateOne(otherPlacedList(planeId), planeNoses[planeId], type, rot);
+    if (result.ok) {
+      placementCube.showOwnPlane(result.cells, 'own-' + planeId);
+    } else {
+      placementCube._clearTag('own-' + planeId);
+    }
+  }
+
+  /** Обновить превью и стрелки активного самолёта */
+  function updateActivePlaneDisplay() {
+    if (!activePlaneId || !placementCube) return;
+
+    const type   = getType(activePlaneId);
+    const nose   = planeNoses[activePlaneId];
+    const rot    = getRotMat(activePlaneId);
+    const result = Planes.validateOne(otherPlacedList(activePlaneId), nose, type, rot);
+
+    placementCube.showPreview(result.cells, result.ok);
+    placementCube.showAxisArrows(result.cells);
+
+    updateFleetItemStatus(activePlaneId);
+    updateAllFleetStatuses();
+    checkAllPlaced();
+  }
+
+  /** Обновить цвет фона элемента в списке флота */
+  function updateFleetItemStatus(planeId) {
+    const item = q(`.fleet-item[data-plane-id="${planeId}"]`);
+    if (!item) return;
+
+    if (!planeNoses[planeId]) {
+      item.classList.remove('placed', 'invalid');
+      return;
+    }
+
+    const type   = getType(planeId);
+    const rot    = getRotMat(planeId);
+    const result = Planes.validateOne(otherPlacedList(planeId), planeNoses[planeId], type, rot);
+    item.classList.toggle('placed',  result.ok);
+    item.classList.toggle('invalid', !result.ok);
+  }
+
+  /** Обновить статусы всех самолётов кроме активного */
+  function updateAllFleetStatuses() {
+    const all = ['large-0','medium-0','medium-1','small-0','small-1','small-2'];
+    for (const id of all) {
+      if (id !== activePlaneId) updateFleetItemStatus(id);
+    }
+  }
+
+  /** Проверить, все ли самолёты расставлены корректно, и обновить кнопку ГОТОВ */
+  function checkAllPlaced() {
+    const all = ['large-0','medium-0','medium-1','small-0','small-1','small-2'];
+
+    if (!all.every(id => planeNoses[id])) {
+      $('btn-ready').disabled = true;
+      return;
+    }
+
+    // Последовательная валидация как на сервере
+    const placed = [];
+    let allOk = true;
+    for (const id of all) {
+      const type   = getType(id);
+      const rot    = getRotMat(id);
+      const result = Planes.validateOne(placed, planeNoses[id], type, rot);
+      if (!result.ok) { allOk = false; break; }
+      placed.push({ type, nose: planeNoses[id], cells: result.cells, rot });
+    }
+
+    $('btn-ready').disabled = !allOk;
   }
 
   /** Инициализировать экран расстановки */
   function startPlacement() {
-    // Сброс состояния расстановки (на случай повторной игры без обновления страницы)
-    for (const key of Object.keys(placedPlanes))  delete placedPlanes[key];
+    for (const key of Object.keys(planeNoses))    delete planeNoses[key];
     for (const key of Object.keys(planeRotations)) delete planeRotations[key];
+    activePlaneId = null;
 
     $('placement-player-label').textContent =
       playerIdx === 0 ? 'Игрок 1' : 'Игрок 2';
     showScreen('screen-placement');
 
-    // Дать layout-у осесться, потом создать куб
     setTimeout(() => {
       const container = $('placement-cube');
-      const section   = container.parentElement;
-      const sz = Math.max(
-        Math.min(section.clientWidth - 32, section.clientHeight - 60, 520),
-        300
-      );
-      container.style.width  = sz + 'px';
-      container.style.height = sz + 'px';
-
       if (placementCube) { placementCube.dispose(); placementCube = null; }
       placementCube = new CubeRenderer(container, { axes: true });
-      placementCube.onZoomChange = pct => { const el = $('pz-pct'); if (el) el.textContent = pct + '%'; };
+      placementCube.onZoomChange = pct => {
+        const el = $('pz-pct'); if (el) el.textContent = pct + '%';
+      };
+
+      // Автоматически выбрать первый самолёт
+      selectPlane('large-0');
     }, 60);
   }
 
-  /** Навесить обработчики на элементы расстановки */
+  /** Навесить обработчики расстановки */
   function setupPlacementHandlers() {
-    // Изменение любого дропдауна → обновить превью
-    document.addEventListener('change', e => {
-      const sel = e.target;
-      if (sel.classList.contains('coord-sel')) {
-        updatePreview(sel.dataset.planeId);
-      }
-    });
+    // Клик по элементу флота → выбрать самолёт
+    const fleetList = $('fleet-list');
+    if (fleetList) {
+      fleetList.addEventListener('click', e => {
+        const item = e.target.closest('.fleet-item');
+        if (item?.dataset.planeId) selectPlane(item.dataset.planeId);
+      });
+    }
 
-    // Кнопки «Разместить», стрелки, вращение
-    document.addEventListener('click', e => {
-      const arr = e.target.closest('.btn-arrow');
-      if (arr) { handleArrow(arr.dataset.planeId, arr.dataset.axis, parseInt(arr.dataset.dir)); return; }
-      const rot = e.target.closest('.btn-rot');
-      if (rot) { handleRotation(rot.dataset.planeId, rot.dataset.axis, rot.dataset.dir); return; }
-      const btn = e.target.closest('.btn-place');
-      if (btn) placePlane(btn.dataset.planeId);
-    });
+    $('btn-ready')?.addEventListener('click', sendPlacement);
+    $('btn-randomize')?.addEventListener('click', randomizePlacement);
 
-    // Кнопка «Готов»
-    $('btn-ready').addEventListener('click', sendPlacement);
-
-    // Zoom для куба расстановки
     bindZoom('pz-in', 'pz-out', 'pz-pct', () => placementCube);
-  }
-
-  /** Получить нос самолёта из дропдаунов (числа) или null */
-  function getNose(planeId) {
-    const xv = parseInt(q(`.sel-x[data-plane-id="${planeId}"]`)?.value);
-    const yv = Planes.yLetterToNum(q(`.sel-y[data-plane-id="${planeId}"]`)?.value || '');
-    const zv = parseInt(q(`.sel-z[data-plane-id="${planeId}"]`)?.value);
-    if (!xv || !yv || !zv) return null;
-    return { x: xv, y: yv, z: zv };
-  }
-
-  /** Тип самолёта из data-атрибута */
-  function getType(planeId) {
-    return q(`.fleet-item[data-plane-id="${planeId}"]`)?.dataset.type || null;
-  }
-
-  /** Обновить превью самолёта в кубе */
-  function updatePreview(planeId) {
-    if (!placementCube) return;
-
-    const nose = getNose(planeId);
-    if (!nose) {
-      placementCube.clearPreview();
-      resetHint();
-      return;
-    }
-
-    const type        = getType(planeId);
-    const otherPlaced = otherPlacedList(planeId);
-    const result      = Planes.validateOne(otherPlaced, nose, type, getRotMat(planeId));
-
-    placementCube.showPreview(result.cells, result.ok);
-
-    const hint = $('placement-cube-hint');
-    hint.style.color = result.ok ? '#22cc66' : '#ff3a3a';
-    hint.innerHTML   = result.ok
-      ? `<b>${Planes.coordLabel(nose.x, nose.y, nose.z)}</b> — нажмите Разместить`
-      : result.error;
-  }
-
-  function resetHint() {
-    const hint = $('placement-cube-hint');
-    hint.style.color = '';
-    hint.innerHTML = 'Введите координаты носа самолёта и нажмите <b>Разместить</b>';
-  }
-
-  /** Попытаться разместить самолёт planeId */
-  function placePlane(planeId) {
-    if (!placementCube) return;
-
-    const nose = getNose(planeId);
-    if (!nose) {
-      showPlacementError('Выберите координаты носа самолёта (X, Y и Z).');
-      return;
-    }
-
-    const type   = getType(planeId);
-    const result = Planes.validateOne(otherPlacedList(planeId), nose, type, getRotMat(planeId));
-
-    if (!result.ok) {
-      placementCube.showPreview(result.cells, false);
-      showPlacementError(result.error);
-      markFleetItemInvalid(planeId);
-      return;
-    }
-
-    hidePlacementError();
-
-    // Удалить предыдущее размещение этого самолёта (если было)
-    if (placedPlanes[planeId]) {
-      placementCube._clearTag('own-' + planeId);
-    }
-
-    // Сохранить и отобразить
-    placedPlanes[planeId] = { type, nose, cells: result.cells, rot: getRotMat(planeId) };
-    placementCube.clearPreview();
-    placementCube.showOwnPlane(result.cells, 'own-' + planeId);
-
-    markFleetItemPlaced(planeId);
-    checkAllPlaced();
-  }
-
-  /** Список уже размещённых самолётов, кроме planeId */
-  function otherPlacedList(excludeId) {
-    return Object.entries(placedPlanes)
-      .filter(([id]) => id !== excludeId)
-      .map(([, p]) => p);
-  }
-
-  function markFleetItemPlaced(planeId) {
-    const item   = q(`.fleet-item[data-plane-id="${planeId}"]`);
-    const status = q(`.placement-status[data-plane-id="${planeId}"]`);
-    if (item)   { item.classList.add('placed'); item.classList.remove('invalid'); }
-    if (status) { status.textContent = '✓'; status.className = 'placement-status ok'; }
-  }
-
-  function markFleetItemInvalid(planeId) {
-    const item   = q(`.fleet-item[data-plane-id="${planeId}"]`);
-    const status = q(`.placement-status[data-plane-id="${planeId}"]`);
-    if (item)   { item.classList.add('invalid'); item.classList.remove('placed'); }
-    if (status) { status.textContent = '✗'; status.className = 'placement-status error'; }
-  }
-
-  function checkAllPlaced() {
-    const all = ['large-0','medium-0','medium-1','small-0','small-1','small-2'];
-    $('btn-ready').disabled = !all.every(id => placedPlanes[id]);
   }
 
   /** Отправить расстановку на сервер */
   function sendPlacement() {
     const all = ['large-0','medium-0','medium-1','small-0','small-1','small-2'];
-    if (!all.every(id => placedPlanes[id])) return;
+    if (!all.every(id => planeNoses[id])) return;
+
+    // Зафиксировать активный самолёт
+    if (activePlaneId && placementCube) {
+      placementCube.clearPreview();
+      placementCube.clearAxisArrows();
+      showPlaneAsOwn(activePlaneId);
+      qAll('.fleet-item').forEach(el => el.classList.remove('active'));
+      activePlaneId = null;
+    }
 
     const planesData = all.map(id => ({
-      type: placedPlanes[id].type,
-      nose: placedPlanes[id].nose,
-      rot:  placedPlanes[id].rot,
+      type: getType(id),
+      nose: planeNoses[id],
+      rot:  getRotMat(id),
     }));
 
     send({ type: 'place_planes', planes: planesData });
@@ -519,119 +472,174 @@
     $('placement-error').classList.add('hidden');
   }
 
+  // ─── РАНДОМНАЯ РАССТАНОВКА ────────────────────────────────────────────────
+
+  const ALL_ROTS = [
+    Planes.IDENTITY_MAT,
+    Planes.ROT_X_POS, Planes.ROT_X_NEG,
+    Planes.ROT_Y_POS, Planes.ROT_Y_NEG,
+    Planes.ROT_Z_POS, Planes.ROT_Z_NEG,
+  ];
+
+  function randomizePlacement(depth) {
+    depth = (depth || 0);
+    if (depth > 15) return; // защита от бесконечной рекурсии
+
+    const ORDER = ['large-0','medium-0','medium-1','small-0','small-1','small-2'];
+
+    // Очистить текущее состояние
+    for (const key of Object.keys(planeNoses))    delete planeNoses[key];
+    for (const key of Object.keys(planeRotations)) delete planeRotations[key];
+
+    if (placementCube) {
+      placementCube.clearAll();
+      // clearAll сбрасывает историю выстрелов — для куба расстановки это нормально
+    }
+
+    const placed = [];
+
+    for (const id of ORDER) {
+      const type = getType(id);
+      let success = false;
+
+      for (let attempt = 0; attempt < 300 && !success; attempt++) {
+        const nose = {
+          x: Math.floor(Math.random() * 10) + 1,
+          y: Math.floor(Math.random() * 10) + 1,
+          z: Math.floor(Math.random() * 10) + 1,
+        };
+        const rot    = ALL_ROTS[Math.floor(Math.random() * ALL_ROTS.length)];
+        const result = Planes.validateOne(placed, nose, type, rot);
+
+        if (result.ok) {
+          planeNoses[id]     = nose;
+          planeRotations[id] = rot;
+          placed.push({ type, nose, cells: result.cells, rot });
+          success = true;
+        }
+      }
+
+      if (!success) {
+        // Попробовать заново с нуля
+        randomizePlacement(depth + 1);
+        return;
+      }
+    }
+
+    // Отрисовать все самолёты синим
+    if (placementCube) {
+      activePlaneId = null;
+      qAll('.fleet-item').forEach(el => el.classList.remove('active'));
+      for (const id of ORDER) {
+        if (!planeNoses[id]) continue;
+        const type  = getType(id);
+        const cells = Planes.getCells(planeNoses[id], type, getRotMat(id));
+        placementCube.showOwnPlane(cells, 'own-' + id);
+      }
+    }
+
+    updateAllFleetStatuses();
+    checkAllPlaced();
+    hidePlacementError();
+  }
+
   // ─── БОЙ ─────────────────────────────────────────────────────────────────
 
-  /** Инициализировать экран боя */
   function startBattle(firstTurn) {
     showScreen('screen-battle');
+    shotNose = { x: 5, y: 5, z: 5 };
 
     setTimeout(() => {
-      const layout = q('.battle-layout');
-      const avW    = Math.floor((layout.clientWidth  - 48) / 2);
-      const avH    = layout.clientHeight - 16;
-      const sz     = Math.max(Math.min(avW, avH, 460), 260);
-
       const myC    = $('my-cube');
       const enemyC = $('enemy-cube');
-      [myC, enemyC].forEach(el => {
-        el.style.width  = sz + 'px';
-        el.style.height = sz + 'px';
-      });
 
       if (myCube)    { myCube.dispose();    myCube    = null; }
       if (enemyCube) { enemyCube.dispose(); enemyCube = null; }
 
-      myCube    = new CubeRenderer(myC);
-      enemyCube = new CubeRenderer(enemyC);
+      myCube    = new CubeRenderer(myC,    { axes: true });
+      enemyCube = new CubeRenderer(enemyC, { axes: true });
       myCube.onZoomChange    = pct => { const el = $('mz-pct'); if (el) el.textContent = pct + '%'; };
       enemyCube.onZoomChange = pct => { const el = $('ez-pct'); if (el) el.textContent = pct + '%'; };
 
-      // Нарисовать собственные самолёты на моём кубе
+      // Нарисовать собственные самолёты
       const all = ['large-0','medium-0','medium-1','small-0','small-1','small-2'];
       for (const id of all) {
-        const p = placedPlanes[id];
-        if (p) myCube.showOwnPlane(p.cells, 'own-' + id);
+        if (!planeNoses[id]) continue;
+        const type  = getType(id);
+        const cells = Planes.getCells(planeNoses[id], type, getRotMat(id));
+        myCube.showOwnPlane(cells, 'own-' + id);
       }
 
-      // Ход устанавливается сервером через your_turn / opponent_turn,
-      // которые приходят сразу после battle_start.
-      // Если к этому моменту myTurn уже установлен — синхронизируем UI.
       setTurnUI(myTurn);
     }, 60);
   }
 
-  /** Обработчики панели выстрела */
   function setupBattleHandlers() {
-    // Zoom для боевых кубов
     bindZoom('mz-in', 'mz-out', 'mz-pct', () => myCube);
     bindZoom('ez-in', 'ez-out', 'ez-pct', () => enemyCube);
-    ['shot-x', 'shot-y', 'shot-z'].forEach(id => {
-      const el = $(id);
-      if (el) el.addEventListener('change', updateShotPreview);
-    });
-    $('btn-fire').addEventListener('click', fireShot);
+
+    $('btn-fire')?.addEventListener('click', fireShot);
+
+    // Переключение режима просмотра куба противника
+    let viewMode = 1;
+    const viewBtn = $('btn-view-mode');
+    if (viewBtn) {
+      viewBtn.addEventListener('click', () => {
+        viewMode = viewMode === 1 ? 2 : 1;
+        if (enemyCube) enemyCube.setViewMode(viewMode);
+        viewBtn.textContent = viewMode === 1 ? 'Режим: выстрелы' : 'Режим: цели';
+        viewBtn.classList.toggle('active', viewMode === 2);
+      });
+    }
   }
 
-  /** Обновить подсветку паттерна выстрела в кубе противника */
+  /** Обновить подсветку прицела в кубе противника */
   function updateShotPreview() {
     if (!enemyCube || !myTurn) return;
 
-    const xv = parseInt($('shot-x').value);
-    const yv = Planes.yLetterToNum($('shot-y').value || '');
-    const zv = parseInt($('shot-z').value);
-
-    if (!xv || !yv || !zv) {
-      enemyCube.clearShotTarget();
-      $('shot-preview-label').textContent = '';
-      $('btn-fire').disabled = true;
-      return;
-    }
-
-    const pattern = Planes.getShotPattern({ x: xv, y: yv, z: zv });
+    const { x, y, z } = shotNose;
+    const pattern = Planes.getShotPattern({ x, y, z });
     enemyCube.setShotTarget(pattern);
 
-    $('shot-preview-label').textContent =
-      `Удар: ${Planes.coordLabel(xv, yv, zv)} + до 6 соседей`;
+    const yLetter   = Planes.yNumToLetter(y);
+    const colorName = Planes.COLORS[z - 1].name;
+    const el = $('shot-coords-text');
+    if (el) el.textContent = `${x} / ${yLetter} / ${colorName}`;
     $('btn-fire').disabled = false;
   }
 
   /** Произвести выстрел */
   function fireShot() {
     if (!myTurn) return;
-
-    const xv = parseInt($('shot-x').value);
-    const yv = Planes.yLetterToNum($('shot-y').value || '');
-    const zv = parseInt($('shot-z').value);
-    if (!xv || !yv || !zv) return;
-
     myTurn = false;
     $('btn-fire').disabled = true;
-    $('shot-preview-label').textContent = 'Выстрел произведён...';
-
-    send({ type: 'shot', x: xv, y: yv, z: zv });
+    const el = $('shot-preview-label');
+    if (el) el.textContent = 'Выстрел произведён...';
+    send({ type: 'shot', x: shotNose.x, y: shotNose.y, z: shotNose.z });
   }
 
-  /** Обновить UI в зависимости от того, чей ход */
+  /** Обновить UI в зависимости от хода */
   function setTurnUI(isMyTurn, bonus = false) {
     const badge   = $('battle-status');
     const overlay = $('opponent-turn-overlay');
     const fireBtn = $('btn-fire');
-    const sels    = ['shot-x','shot-y','shot-z'];
 
     if (isMyTurn) {
       badge.textContent = bonus ? 'ВАШ ХОД  ✦  бонусный' : 'ВАШ ХОД';
       badge.className   = 'top-bar-badge status-badge your-turn';
       overlay.classList.add('hidden');
-      sels.forEach(id => $(id).disabled = false);
-      updateShotPreview();   // покажем прицел по текущим значениям дропдаунов
+      fireBtn.disabled  = false;
+      updateShotPreview();
     } else {
       badge.textContent = 'ХОД ПРОТИВНИКА';
       badge.className   = 'top-bar-badge status-badge opponent-turn';
       overlay.classList.remove('hidden');
       fireBtn.disabled  = true;
-      sels.forEach(id => $(id).disabled = true);
       if (enemyCube) enemyCube.clearShotTarget();
-      $('shot-preview-label').textContent = '';
+      const ct = $('shot-coords-text');
+      if (ct) ct.textContent = '—';
+      const pl = $('shot-preview-label');
+      if (pl) pl.textContent = '';
     }
   }
 
@@ -641,30 +649,21 @@
     const sc = $('screen-end');
     sc.classList.remove('win', 'lose');
     sc.classList.add(win ? 'win' : 'lose');
-
-    $('end-icon').textContent    = win ? '✈' : '💥';
-    $('end-result').textContent  = win ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ';
+    $('end-icon').textContent     = win ? '✈' : '💥';
+    $('end-result').textContent   = win ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ';
     $('end-subtitle').textContent = win
       ? 'Весь флот противника уничтожен!'
       : 'Ваш флот полностью уничтожен.';
-
     showScreen('screen-end');
   }
 
   // ─── УВЕДОМЛЕНИЯ ─────────────────────────────────────────────────────────
 
-  /**
-   * Показать всплывающее уведомление.
-   * @param {string} text
-   * @param {'hit'|'miss'|'kill'} type
-   * @param {number} duration   мс
-   */
   function showNotification(text, type, duration) {
     const el = $('hit-notification');
     el.textContent = text;
     el.className   = `hit-notification ${type}`;
     el.classList.remove('hidden');
-
     if (notifTimer) clearTimeout(notifTimer);
     notifTimer = setTimeout(() => el.classList.add('hidden'), duration);
   }
